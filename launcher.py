@@ -55,8 +55,6 @@ class MinecraftVersion:
 		self.manifest_sha1 = kwargs["sha1"]
 		self.compliance_level = kwargs["complianceLevel"]
 
-	# self.load_manifest()
-
 	def __str__(self):
 		return f"{self.version_type}: {self.id}"
 
@@ -81,8 +79,10 @@ class MinecraftVersion:
 			download = self.downloads[download_type]
 			if isinstance(directory, str):
 				rundir = pathlib.Path(pathlib.Path(__file__, ).parent.absolute(), directory)
-			else:
+			elif isinstance(directory, os.PathLike):
 				rundir = directory
+			else:
+				raise ValueError("id vas not parsed as string¡?" if not isinstance(self.id, str) else "argument directory is neither folder name (str) nor PathLike object!")
 			created_folder = False
 			while True:
 				try:
@@ -99,8 +99,9 @@ class MinecraftVersion:
 									break
 								sha1.update(data)
 							if sha1.hexdigest() == self.downloads["server"].sha1:
-								print("server file appears to be in place and correct")
+								print("server jar appears to be in place and correct")
 								break
+						f.close()
 						f = open(download.file_name, 'wb')
 						print("Downloading: %s Bytes: %s" % (download.file_name, file_size))
 						file_size_dl = 0
@@ -113,8 +114,9 @@ class MinecraftVersion:
 							file_size_dl += len(buffer)
 							f.write(buffer)
 							# noinspection PyStringFormat
-							print(rf"Downloading %{ceil(log10(file_size / 1024))}dKB/{file_size // 1024}KB  [%3.2f%%]" % (
-								file_size_dl // 1024, file_size_dl * 100 / file_size))
+							print(
+								rf"Downloading %{ceil(log10(file_size / 1024))}dKB/{file_size // 1024}KB  [%3.2f%%]" % (
+									file_size_dl // 1024, file_size_dl * 100 / file_size))
 					break
 				except FileNotFoundError:
 					try:
@@ -128,7 +130,7 @@ class MinecraftVersion:
 		else:
 			raise AttributeError
 
-	def start_server(self, directory: Optional[Union[str, os.PathLike]] = None):
+	def start_server(self, directory: Optional[Union[str, os.PathLike]] = None, fabric: bool = False):
 		print("checking server jar")
 		self.download(directory=directory)
 		try:
@@ -143,13 +145,16 @@ class MinecraftVersion:
 		except FileNotFoundError:
 			with open("eula.txt", "w") as eula:
 				eula.write("""#By changing the setting below to TRUE you are indicating your agreement"""
-						f""" to our EULA (https://account.mojang.com/documents/minecraft_eula).
+						   f""" to our EULA (https://account.mojang.com/documents/minecraft_eula).
 #{time.asctime(time.gmtime())}
 eula=true""")
 		finally:
 			print("EULA agreed.")
 		print("starting the server")
-		os.system("java -jar server.jar")
+		if os.path.exists("fabric-server-launch.jar") and fabric:
+			os.system("java -jar fabric-server-launch.jar")
+		else:
+			os.system("java -jar server.jar")
 
 	def start_fabric_server(self, directory: Optional[Union[str, os.PathLike]] = None):
 		pass
@@ -191,6 +196,7 @@ class VersionStorage:
 	latest_snapshot_id: str
 	latest_fabric_installer: str = None
 	latest_fabric_loader: str = None
+	fabric_installer: os.PathLike
 	minecraft_versions: dict[str, MinecraftVersion] = {}
 	fabric_installer_versions: dict[str, FabricInstaller] = {}
 	fabric_loader_versions: dict[str, FabricLoader] = {}
@@ -240,23 +246,10 @@ class VersionStorage:
 		while True:
 			try:
 				os.chdir(rundir)
-				with open(download.file_name, "rb") as file:
+				with open(download.file_name, 'wb') as file:
 					u = request.urlopen(download.url)
-					_sha1 = request.urlopen(download.url + ".sha1").read().decode()
 					file_size = int(u.length)
 					block_sz = 8192
-					if os.path.getsize(download.file_name) == file_size:
-						sha1 = hashlib.sha1()
-						while True:
-							data = file.read(block_sz)
-							if not data:
-								break
-							sha1.update(data)
-						if sha1.hexdigest() == _sha1:
-							print("fabric installer appears to be in place and correct")
-							break
-					file.close()
-					file = open(download.file_name, 'wb')
 					print("Downloading: %s Bytes: %s" % (download.file_name, file_size))
 					file_size_dl = 0
 
@@ -281,16 +274,53 @@ class VersionStorage:
 					if not created_folder:
 						print(f"installer jar for version {version} is not found creating")
 
-	def check_fabric_installer(self):
-		self.load_installer_version()
+	def check_fabric_installer(self, directory: Optional[Union[str, os.PathLike]] = None, version: str = "latest"):
+		if version == "latest":
+			version = self.latest_fabric_installer
+		download = self.fabric_installer_versions[version]
+		if isinstance(directory, str):
+			rundir = pathlib.Path(pathlib.Path(__file__, ).parent.absolute(), directory)
+		elif isinstance(directory, pathlib.Path):
+			rundir = directory
+		else:
+			rundir = pathlib.Path(pathlib.Path(__file__, ).parent.absolute())
+		try:
+			self.fabric_installer = pathlib.Path(rundir, download.file_name)
+			os.chdir(rundir)
+			with open(download.file_name, "rb") as file:
+				file_response = request.urlopen(download.url)
+				maven_sha1 = request.urlopen(download.url + ".sha1").read().decode()
+				maven_sha512 = request.urlopen(download.url + ".sha512").read().decode()
+				file_size = int(file_response.length)
+				block_sz = 8192
+				if os.path.getsize(download.file_name) == file_size:
+					sha1 = hashlib.sha1()
+					sha512 = hashlib.sha512()
+					while True:
+						data = file.read(block_sz)
+						if not data:
+							break
+						sha1.update(data)
+						sha512.update(data)
+					if sha1.hexdigest() == maven_sha1 and sha512.hexdigest() == maven_sha512:
+						print("fabric installer appears to be in place and correct")
+		except FileNotFoundError:
+			self.load_installer_version(directory=rundir, version=version)
+		finally:
+			print("finished checking fabric installer")
 
 	def enable_fabric(self):
 		self.check_fabric_installer()
 
+	def apply_fabric(self, server, directory: Optional[Union[str, os.PathLike]] = None, loader: Optional[str] = None):
+		os.system(f"java -jar '{self.fabric_installer}' server"
+				  f"{' -dir ' + directory.__str__() if directory else ''}"
+				  f"{' --snapshot' if server.version_type == 'snapshot' else ''} -mcversion {server.id}"
+				  f"{' -loader ' + loader if loader else ''}")
+
 
 version_manifest_url = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
 fabric_versions_url = "https://meta.fabricmc.net/v2/versions"
-fabric_loader_url = "https://meta.fabricmc.net/v2/versions/loader"
 version_manifest = VersionStorage(**json.load(request.urlopen(version_manifest_url)))
 version_manifest.load_fabric(json.load(request.urlopen(fabric_versions_url)))
 print("latest release:", version_manifest.latest_release_id)
@@ -299,6 +329,7 @@ print("latest loader:", version_manifest.latest_fabric_loader)
 
 snapshots_enabled: bool = False
 fabric_enabled: bool = False
+directory = None
 unrecognized_options: list[str] = []
 installer_options: list[str] = []
 server_options: list[str] = []
@@ -307,11 +338,12 @@ minecraft_version: str = 'latest'
 parsed_args: int = 0
 
 
-def help():
+def help() -> None:
 	print("""
 	--fabric\tlaunches server with fabric
 	--snapshot\tenables snapshots
-	--version v\tspecifies which version to use, latest by default
+	--version <version>\tspecifies which version to use, latest by default
+	--directory, --location\twhere to install server
 	""")
 
 
@@ -321,13 +353,17 @@ def check_version():
 		raise Exception("to enable snapshots")
 
 
-print("all          >", sys.argv)
+print("all          >", sys.argv[0:])
 
+loaded_config = None
+
+token = None
 while len(sys.argv) > 1:
-	token = None
 	if (popped := sys.argv.pop()) == '--snapshot':
 		installer_options.append("--snapshot")
 		snapshots_enabled = True
+	elif popped == "--directory" or popped == "--location":
+		directory = pathlib.Path(directory)
 	elif popped == '--fabric':
 		version_manifest.enable_fabric()
 		fabric_enabled = True
@@ -359,18 +395,28 @@ while len(sys.argv) > 1:
 		else:
 			if token == "--fabric-options" or token == "--server-options":
 				sys.argv.append(token)
+	elif popped == "--config-file":
+		location = unrecognized_options.pop()
+		loaded_config = json.load(f := open(location))
+		f.close()
+		del location
+		break
 	elif popped == "--help":
 		help()
 	else:
 		unrecognized_options.append(popped)
 
+if loaded_config:
+	print(loaded_config)
 print("fabric       >", fabric_enabled)
 print("snapshot     >", snapshots_enabled)
 print("version      >", minecraft_version)
+print("directory    >", directory if directory else "default")
 print("jvm          >", jvm_options)
 print("installer    >", installer_options)
 print("server       >", server_options)
 print("unrecognized >", unrecognized_options)
+
 if minecraft_version == 'latest':
 	if snapshots_enabled:
 		minecraft_version = version_manifest.latest_snapshot_id
@@ -379,10 +425,9 @@ if minecraft_version == 'latest':
 
 if fabric_enabled:
 	version_manifest.check_fabric_installer()
-exit(0)
-print(server := version_manifest.get_version(minecraft_version))
-server.start_server()
+server = version_manifest.get_version(minecraft_version)
+server.download("server", directory)
+version_manifest.apply_fabric(server)
+server.start_server(directory=directory, fabric=fabric_enabled)
 
 # version_manifest.get_latest_release().start_server()
-
-# subprocess.call(["java", "-jar", "server.jar"])
