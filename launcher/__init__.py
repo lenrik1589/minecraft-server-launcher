@@ -146,14 +146,9 @@ usage:
 						open("instances/config.json", "x").close()
 					except FileExistsError:
 						pass
-					with open("instances/config.json", "r+") as instances_file:
-						try:
-							program_config = jsonpickle.loads(instances_file.read())
-						except json.JSONDecodeError:
-							program_config = {}
-						instances_file.seek(0)
-						program_config["instances"][config.name] = config.folder
-						instances_file.write(jsonpickle.dumps(program_config, indent="\t"))
+					program_config = load_config()
+					program_config["instances"][config.name] = config.folder
+					save_config()
 					print(f"created a config named '{config.name}' on {config.mc_version}{f' with {config.mod_loader}' if config.mod_loader else ''}")
 				case ("delete" | "remove"), *args:
 					if os.path.exists("instances"):
@@ -312,9 +307,12 @@ Server args: {config.server_args}''' if config.server_args else ""}\
 
 
 def load_config():
-	with open("instances/config.json", "r+") as instances_file:
-		program_config = jsonpickle.loads(instances_file.read())
-	return program_config
+	try:
+		with open("instances/config.json", "r+") as instances_file:
+			program_config = jsonpickle.loads(instances_file.read())
+		return program_config
+	except FileNotFoundError:
+		return {"instances": {}}
 
 
 def save_config(program_config):
