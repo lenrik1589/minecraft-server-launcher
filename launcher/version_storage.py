@@ -13,12 +13,9 @@ from launcher.resource_location import ResourceLocation
 class VersionStorage:
 	initialized = None
 	default_java = "java"
-	minecraft_manifest_url = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
-	minecraft_manifest = ResourceLocation(minecraft_manifest_url)
-	fabric_manifest_url = "https://meta.fabricmc.net/v2/versions"
-	fabric_manifest = ResourceLocation(fabric_manifest_url)
-	quilt_manifest_url = "https://meta.quiltmc.org/v3/versions"
-	quilt_manifest = ResourceLocation(quilt_manifest_url)
+	minecraft_manifest = ResourceLocation("https://launchermeta.mojang.com/mc/game/version_manifest_v2.json", filename="minecraft manifest.json")
+	fabric_manifest = ResourceLocation("https://meta.fabricmc.net/v2/versions", filename="fabric manifest.json")
+	quilt_manifest = ResourceLocation("https://meta.quiltmc.org/v3/versions", filename="quilt manifest.json")
 	minecraft_versions = {}
 	fabric_versions = {}
 	quilt_versions = {}
@@ -39,28 +36,15 @@ please check your internet connection, or notify the developer."""
 
 	def __new__(cls, *args, refresh=False, find_java=False, **kwargs):
 		import json
-		from urllib import request
 		import datetime
 		if cls.initialized:
 			return cls.initialized
 		try:
 			if refresh or not (os.path.exists("cache") and datetime.datetime.now().timestamp() - os.stat("cache/minecraft manifest.json").st_mtime < 6 * 60 * 60):
-				pathlib.Path("cache/versions").mkdir(exist_ok=True)
-				for man in ["minecraft", "quilt", "fabric"]:
-					try:
-						open(f"cache/{man} manifest.json", "x").close()
-					except FileExistsError:
-						pass
-				with open("cache/minecraft manifest.json", "r+") as mc_man, \
-						open("cache/fabric manifest.json", "r+") as fmc_man, \
-						open("cache/quilt manifest.json", "r+") as qmc_man:
-					qmc_request = request.urlopen(cls.quilt_manifest_url)
-					fmc_request = request.urlopen(cls.fabric_manifest_url)
-					mc_request = request.urlopen(cls.minecraft_manifest_url)
-					print("Using version manifests provided by Mojang and FabricMc")
-					json.dump(json.load(mc_request), mc_man)
-					json.dump(json.load(fmc_request), fmc_man)
-					json.dump(json.load(qmc_request), qmc_man)
+				pathlib.Path("cache/versions").mkdir(parents=True, exist_ok=True)
+				VersionStorage.quilt_manifest.download("cache", force=True)
+				VersionStorage.fabric_manifest.download("cache", force=True)
+				VersionStorage.minecraft_manifest.download("cache", force=True)
 		except urllib.error.URLError:
 			if os.path.exists("cache"):
 				print(cls.USING_CACHES)

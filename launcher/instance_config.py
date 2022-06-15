@@ -62,7 +62,7 @@ class InstanceConfig:
 		else:
 			if not isinstance(self.mc_version, MinecraftServerVersion):
 				self.mc_version = VersionStorage.resolve_mc_jar(self.mc_version)
-			self.mc_version.download(self.folder, check=True)
+			self.mc_version.download(self.folder, check=True, force=True)
 			self.save()
 			if self.mod_loader:
 				if not self.mod_loader_version:
@@ -70,11 +70,13 @@ class InstanceConfig:
 					self.save()
 				self.mod_loader_installed = VersionStorage.install_mod_loader(self.mod_loader, self.mc_version, self.mod_loader_version, self.folder)
 				self.save()
-			try:
-				with open(f"{self.folder}/eula.txt", "x") as eula:
-					eula.write("eula=true")
-			except FileExistsError:
-				pass
+		try:
+			with open(f"{self.folder}/eula.txt", "x") as eula:
+				eula.write("eula=true")
+		except FileExistsError:
+			pass
+		self.installed = True
+		self.save()
 
 
 	def run(self):

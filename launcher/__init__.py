@@ -20,19 +20,17 @@ def main():
 	args = sys.argv[1:]
 	command = False
 	version_storage_params = {}
-	processed = args
-	while not command:
+	while not command and args:
 		match args:
 			case ('--refresh-manifests' | '--refresh' | "-r"), *more:
 				version_storage_params["refresh"] = True
-				processed = more
+				args = more
 			case '--find-java', *more:
 				version_storage_params["find_java"] = True
-				processed = more
+				args = more
 			case _:
 				command = True
 	VersionStorage(**version_storage_params)
-	args = processed
 	match args:
 		case "help", *_:
 
