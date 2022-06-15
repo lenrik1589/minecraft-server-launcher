@@ -148,7 +148,7 @@ usage:
 						pass
 					program_config = load_config()
 					program_config["instances"][config.name] = config.folder
-					save_config()
+					save_config(program_config)
 					print(f"created a config named '{config.name}' on {config.mc_version}{f' with {config.mod_loader}' if config.mod_loader else ''}")
 				case ("delete" | "remove"), *args:
 					if os.path.exists("instances"):
@@ -312,6 +312,8 @@ def load_config():
 			program_config = jsonpickle.loads(instances_file.read())
 		return program_config
 	except FileNotFoundError:
+		return {"instances": {}}
+	except	json.JSONDecodeError:
 		return {"instances": {}}
 
 

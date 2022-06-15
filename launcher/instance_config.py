@@ -1,3 +1,4 @@
+import datetime
 import os.path
 import subprocess
 
@@ -28,6 +29,7 @@ class InstanceConfig:
 	java_args: list[str] | None = None
 	server_args: list[str] | None = None
 	installed = False
+	screen_pattern = None
 
 	def __init__(self, name=None, version=None, mod_loader=None, mod_loader_version=None, snap=False, folder=None, custom_jar=None, server_args=["-nogui"]):
 		self.snap = snap or False
@@ -80,22 +82,36 @@ class InstanceConfig:
 
 
 	def run(self):
+		import re
+		self.screen_pattern = self.screen_pattern or re.compile(r"\s+\d+\.(\S+)\s+\(\d+/\d+/\d+\s+\d+:\d+:\d+\)\s+\(\w+\)")
+		with os.popen(f'screen -ls "{self.name}"', "r") as screen:
+			output = screen.readlines()[1:-2]
+		for line in output:
+			if self.screen_pattern.match(line).group(1) == self.name.replace(" ", "_"):
+				exit(f'requested server running already, connect to it using screen -r {self.name}')
 		if not self.installed:
 			try:
 				self.install()
 			except Exception as e:
 				raise
+		run_id = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+		os.chdir(self.folder)
+		cmd = f'screen -d -m -S "{self.name.replace(" ", "_")}" zsh -c "git commit -A -m \"{run_id}-start\"; ' \
+					f'{VersionStorage.default_java}{" " + " ".join(self.java_args) if self.java_args else ""} -jar '
 		if self.mod_loader:
 			match self.mod_loader:
 				case "quilt":
-					os.chdir(self.folder)
-					cmd = f'screen -d -m -S "{self.name}" zsh -c "{VersionStorage.default_java}{" " + " ".join(self.java_args) if self.java_args else ""} -jar quilt-server-launch.jar{" " + " ".join(self.server_args) if self.server_args else ""}"'
-					os.popen(cmd)
-					exit(f'Server "{self.name}" has been started, use "screen -r {self.name}" to view output')
+					cmd += "quilt-server=launcher.jar"
 				case "fabric":
-					pass
+					cmd += "fabric-server=launcher.jar"
+		elif self.custom_jar:
+			cmd += self.custom_jar.filename
 		else:
-			pass
+			cmd += "server.jar"
+		cmd += f'{" " + " ".join(self.server_args) if self.server_args else ""}; ' \
+						f'git commit -A -m \"{run_id}-stop\""'
+		os.popen(cmd)
+		exit(f'Server "{self.name}" has been started, use "screen -r {self.name.replace(" ", "_")}" to view output')
 
 
 	def toJson(self):
