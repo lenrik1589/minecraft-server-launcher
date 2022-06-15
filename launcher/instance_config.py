@@ -96,22 +96,22 @@ class InstanceConfig:
 				raise
 		run_id = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 		os.chdir(self.folder)
-		cmd = f'screen -d -m -S "{self.name.replace(" ", "_")}" zsh -c "git commit -a -m \\"{run_id}-start\\"; ' \
-					f'{VersionStorage.default_java}{" " + " ".join(self.java_args) if self.java_args else ""} -jar '
+		cmd = f'screen -d -m -S "{self.name.replace(" ", "_")}" zsh -c "(git commit -a -m \\"{run_id}-start\\" && ' \
+					f'({VersionStorage.default_java}{" " + " ".join(self.java_args) if self.java_args else ""} -jar '
 		if self.mod_loader:
 			match self.mod_loader:
 				case "quilt":
-					cmd += "quilt-server-launcher.jar"
+					cmd += "quilt-server-launch.jar"
 				case "fabric":
-					cmd += "fabric-server-launcher.jar"
+					cmd += "fabric-server-launch.jar"
 		elif self.custom_jar:
 			cmd += self.custom_jar.filename
 		else:
 			cmd += "server.jar"
-		cmd += f'{" " + " ".join(self.server_args) if self.server_args else ""}; ' \
-						f'git commit -a -m \\"{run_id}-stop\\""'
-		# os.popen(cmd)
-		print(cmd)
+		cmd += f'{" " + " ".join(self.server_args) if self.server_args else ""} && ' \
+						f'git commit -a -m \\"{run_id}-stop\\")) || (git commit -a -m \\"{run_id}-stop\\" && sleep 30)"'
+		os.popen(cmd)
+		# print(cmd)
 		exit(f'Server "{self.name}" has been started, use "screen -r {self.name.replace(" ", "_")}" to view output')
 
 
